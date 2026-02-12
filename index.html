@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dark Circle Detection</title>
+    <style>
+        .container { text-align: center; font-family: sans-serif; padding: 20px; }
+        video { border-radius: 10px; background: #222; width: 100%; max-width: 500px; }
+        .result { margin-top: 15px; font-weight: bold; font-size: 1.2rem; color: #007bff; }
+        button { padding: 10px 20px; font-size: 1rem; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Healthcare AI - Dark Circle Analysis</h2>
+        <video id="video" autoplay playsinline></video>
+        <br>
+        <button id="startBtn">🟢 Start Detection (10s)</button>
+        <div id="status" class="result">Ready</div>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+        const canvas = document.getElementById('canvas');
+        
+        // Change this to your Render URL after deployment
+        const API_URL = "http://127.0.0.1:8000/darkcircle"; 
+
+        async function startDetection() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                status.innerText = "Analyzing... keep your face steady";
+                
+                let detections = 0;
+                let totalSamples = 0;
+                const duration = 10000; // 10 seconds
+                const intervalTime = 1000; // Sample every 1 second
+
+                const interval = setInterval(async () => {
+                    // Capture frame
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    
+                    // Convert to blob and send
+                    canvas.toBlob(async (blob) => {
+                        const formData = new FormData();
+                        formData.append('image', blob, 'frame.jpg');
+
+                        try {
+                            const response = await fetch(API_URL, { method: 'POST', body: formData });
+                            const data = await response.json();
+                            totalSamples++;
+                            if (data.result === "Dark circle detected") detections++;
+                        } catch (err) { console.error("API Error:", err); }
+                    }, 'image/jpeg');
+
+                }, intervalTime);
+
+                // Stop after 10 seconds
+                setTimeout(() => {
+                    clearInterval(interval);
+                    stream.getTracks().forEach(track => track.stop()); // Close webcam
+                    
+                    const resultText = detections > (totalSamples / 2) 
+                        ? "Result: Dark Circles Detected" 
+                        : "Result: No Dark Circles Detected";
+                    status.innerText = resultText;
+                }, duration);
+
+            } catch (err) {
+                status.innerText = "Webcam access denied";
+            }
+        }
+
+        startBtn.addEventListener('click', startDetection);
+    </script>
+</body>
+</html>
